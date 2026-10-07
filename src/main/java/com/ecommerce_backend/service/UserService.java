@@ -6,27 +6,27 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.ecommerce_backend.model.User;
-import com.ecommerce_backend.repository.EcommerceRepository;
+import com.ecommerce_backend.repository.UserRepository;
 
 @Service
 public class UserService {
 	@Autowired
-	private EcommerceRepository ecommerceRepository;
+	private UserRepository userRepository;
 	
 	public List<User>getAllUsers(){
-		return ecommerceRepository.findAll();		
+		return userRepository.findAll();		
 		
 	}
 	public User createUser(User user) {
-		return ecommerceRepository.save(user);
+		return userRepository.save(user);
 	}
 
 	public User getUserById(Long id) {
-		return ecommerceRepository.findById(id).orElse(null);
+		return userRepository.findById(id).orElse(null);
 	}
 	public void deleteUserById(Long id) {
-		ecommerceRepository.findById(id).orElse(null);
-		ecommerceRepository.deleteById(id);
+		userRepository.findById(id).orElse(null);
+		userRepository.deleteById(id);
 		
 	}
 

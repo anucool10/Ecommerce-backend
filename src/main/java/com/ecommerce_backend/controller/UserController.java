@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ecommerce_backend.model.User;
-import com.ecommerce_backend.repository.EcommerceRepository;
 import com.ecommerce_backend.service.UserService;
 
 
