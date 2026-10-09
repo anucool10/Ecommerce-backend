@@ -22,6 +22,7 @@ public class Product {
 	private Double price;
 	@PositiveOrZero(message = "Stock quantity cannot be negative")
 	private int stockQuantity;
+	private String imageUrl;
 	
 	
 	public Product() {
@@ -30,13 +31,14 @@ public class Product {
 
 
 	public Product(Long id, String name,String description,
-					double price, int stockQuantity) {
+					double price, int stockQuantity, String imageUrl) {
 		super();
 		this.id = id;
 		this.name = name;
 		this.description = description;
 		this.price = price;
 		this.stockQuantity = stockQuantity;
+		this.imageUrl = imageUrl;
 	}
 
 
@@ -88,7 +90,13 @@ public class Product {
 	public void setStockQuantity(int stockQuantity) {
 		this.stockQuantity = stockQuantity;
 	}
-	
+	public String getImageUrl() {
+	    return imageUrl;
+	}
+
+	public void setImageUrl(String imageUrl) {
+	    this.imageUrl = imageUrl;
+	}
 	
 
 }
