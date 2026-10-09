@@ -1,7 +1,9 @@
 package com.ecommerce_backend.model;
 
-import org.springframework.web.bind.annotation.RequestMapping;
+import java.math.BigDecimal;
+import java.util.List;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -9,44 +11,45 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 @Entity
-@RequestMapping("/orders")
-@Table(name = "order_items")
+@Table(name = "orders")
 public class Order {
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
-	@ManyToOne
-    @JoinColumn(name = "order_id", nullable = false)
-    private Order order;
-	@ManyToOne
-    @JoinColumn(name = "product_id", nullable = false)
-    private Product product;
-	@Column(nullable = false)
-    private Integer quantity;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Column(nullable = false)
-    private Double priceAtPurchase;
-	 
-	public Order() {
-		// TODO Auto-generated constructor stub
-	}
-	
-	public Long getId() { return id; }
+    private String status; // e.g., "PENDING"
+
+    @Column(nullable = false)
+    private BigDecimal totalPrice;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderItem> orderItems;
+
+    public Order() {}
+
+    // Getters and Setters
+    public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public Order getOrder() { return order; }
-    public void setOrder(Order order) { this.order = order; }
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
 
-    public Product getProduct() { return product; }
-    public void setProduct(Product product) { this.product = product; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public Integer getQuantity() { return quantity; }
-    public void setQuantity(Integer quantity) { this.quantity = quantity; }
+    public BigDecimal getTotalPrice() { return totalPrice; }
+    public void setTotalPrice(BigDecimal totalPrice) { this.totalPrice = totalPrice; }
 
-    public Double getPriceAtPurchase() { return priceAtPurchase; }
-    public void setPriceAtPurchase(Double priceAtPurchase) { this.priceAtPurchase = priceAtPurchase; }
-
+    public List<OrderItem> getOrderItems() { return orderItems; }
+    public void setOrderItems(List<OrderItem> orderItems) { this.orderItems = orderItems; }
 }
