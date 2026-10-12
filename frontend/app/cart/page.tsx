@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -16,60 +17,82 @@ interface CartItem {
   quantity: number;
 }
 
+interface OrderResponse {
+  id: string;
+  trackingNumber?: string;
+  [key: string]: any;
+}
+
 const FALLBACK_IMG = 'https://picsum.photos/seed/placeholder/300/300';
 
 export default function CartPage() {
   const [userId, setUserId] = useState<number>(1);
-  const [orderSuccess, setOrderSuccess] = useState<any>(null);
+  const [orderSuccess, setOrderSuccess] = useState<OrderResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [step, setStep] = useState<'cart' | 'payment'>('cart');
 
-  // Read the cart ONCE on load
   useEffect(() => {
     try {
       const saved = localStorage.getItem('cart');
+
       if (saved) {
         const parsed: CartItem[] = JSON.parse(saved);
+
         if (Array.isArray(parsed)) {
-          // Clamp old quantities to available stock
           const fixed = parsed
-            .map((i) => ({
-              ...i,
+            .map((item) => ({
+              ...item,
               quantity:
-                i.product.stockQuantity !== undefined
-                  ? Math.min(i.quantity, i.product.stockQuantity)
-                  : i.quantity,
+                item.product.stockQuantity !== undefined
+                  ? Math.min(item.quantity, item.product.stockQuantity)
+                  : item.quantity,
             }))
-            .filter((i) => i.quantity > 0);
+            .filter((item) => item.quantity > 0);
+
           setCartItems(fixed);
-          localStorage.setItem('cart', JSON.stringify(fixed));
         }
       }
     } catch (e) {
       console.error('Could not read cart', e);
     }
+
     setLoaded(true);
   }, []);
 
-  // Every change goes through here so state and storage always match
   const saveCart = (next: CartItem[]) => {
     setCartItems(next);
     localStorage.setItem('cart', JSON.stringify(next));
   };
 
-  const itemCount = cartItems.reduce((acc, i) => acc + i.quantity, 0);
-  const subtotal = cartItems.reduce((acc, i) => acc + i.product.price * i.quantity, 0);
+  const itemCount = cartItems.reduce(
+    (total, item) => total + item.quantity,
+    0
+  );
+
+  const subtotal = cartItems.reduce(
+    (total, item) => total + item.product.price * item.quantity,
+    0
+  );
 
   const updateQuantity = (id: number, delta: number) => {
     const next = cartItems
       .map((item) => {
-        if (item.product.id !== id) return item;
+        if (item.product.id !== id) {
+          return item;
+        }
+
         const max = item.product.stockQuantity ?? Infinity;
-        return { ...item, quantity: Math.min(item.quantity + delta, max) };
+
+        return {
+          ...item,
+          quantity: Math.min(item.quantity + delta, max),
+        };
       })
       .filter((item) => item.quantity > 0);
+
     saveCart(next);
   };
 
@@ -77,7 +100,23 @@ export default function CartPage() {
     saveCart(cartItems.filter((item) => item.product.id !== id));
   };
 
-  const handleCheckout = async () => {
+  const startCheckout = () => {
+    setOrderSuccess(null);
+    setError(null);
+    setStep('payment');
+  };
+
+  const returnToCart = () => {
+    setOrderSuccess(null);
+    setError(null);
+    setStep('cart');
+  };
+
+  const handleFinalPayment = async () => {
+    if (loading || cartItems.length === 0) {
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
@@ -92,24 +131,35 @@ export default function CartPage() {
     try {
       const res = await fetch('http://localhost:8080/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(errText || 'Order failed. Check stock or User ID.');
+        throw new Error(
+          errText || 'Order failed. Check stock or User ID.'
+        );
       }
 
-      const data = await res.json();
+      const data: OrderResponse = await res.json();
+
       setOrderSuccess(data);
       saveCart([]);
-    } catch (err: any) {
+      setStep('cart');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Something went wrong.';
+
       setError(
-        err.message === 'Failed to fetch'
+        message === 'Failed to fetch'
           ? 'Could not reach the backend. Is it running on port 8080?'
-          : err.message
+          : message
       );
+
+      setStep('cart');
     } finally {
       setLoading(false);
     }
@@ -119,9 +169,18 @@ export default function CartPage() {
     <div className="min-h-screen bg-gray-100 text-gray-900 pb-12">
       <header className="bg-slate-900 text-white mb-6">
         <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <Link href="/" className="text-lg font-semibold hover:text-amber-400 transition">
+          <Link
+            href="/"
+            onClick={() => {
+              setOrderSuccess(null);
+              setError(null);
+              setStep('cart');
+            }}
+            className="text-lg font-semibold hover:text-amber-400 transition"
+          >
             ← Continue Shopping
           </Link>
+
           <span className="text-sm text-slate-300">
             🛒 {itemCount} item{itemCount !== 1 && 's'}
           </span>
@@ -131,40 +190,149 @@ export default function CartPage() {
       <main className="max-w-6xl mx-auto px-6">
         {orderSuccess ? (
           <div className="bg-white border rounded-lg p-8 shadow-sm">
-            <h2 className="text-2xl font-bold text-emerald-700 mb-2">Order placed, thank you! 🎉</h2>
-            <p className="text-gray-600 mb-6">
+            <h2 className="text-2xl font-bold text-emerald-700 mb-2">
+              Order placed, thank you! 🎉
+            </h2>
+
+            <p className="text-gray-600 mb-2">
               Your order #{orderSuccess.id} was processed successfully.
             </p>
-            <div className="flex gap-3">
+
+            {orderSuccess.trackingNumber && (
+              <p className="text-gray-600 mb-6">
+                Tracking number: {orderSuccess.trackingNumber}
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-3">
               <Link
                 href="/orders"
                 className="inline-block bg-amber-400 hover:bg-amber-500 text-slate-900 px-6 py-2.5 rounded-full font-medium transition"
               >
                 View My Orders
               </Link>
+
               <Link
                 href="/"
+                onClick={() => {
+                  setOrderSuccess(null);
+                  setError(null);
+                  setStep('cart');
+                }}
                 className="inline-block border border-gray-300 hover:bg-gray-50 px-6 py-2.5 rounded-full font-medium transition"
               >
                 Return to Store
               </Link>
             </div>
           </div>
+        ) : step === 'payment' ? (
+          <div className="max-w-md mx-auto bg-white border rounded-lg p-6 shadow-sm">
+            <h2 className="text-xl font-bold mb-1">
+              Simulated Secure Payment
+            </h2>
+
+            <p className="text-xs text-gray-500 mb-6">
+              Enter mock card details to simulate checkout.
+            </p>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Cardholder Name
+                </label>
+                <input
+                  type="text"
+                  defaultValue="Anukul Developer"
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Card Number
+                </label>
+                <input
+                  type="text"
+                  defaultValue="4242 •••• •••• 4242"
+                  className="w-full border rounded-md px-3 py-2 text-sm font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    Expiry
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue="12/28"
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    CVV
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue="123"
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4 mb-6 flex justify-between font-bold text-base">
+              <span>Total Amount:</span>
+              <span>${subtotal.toFixed(2)}</span>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={returnToCart}
+                disabled={loading}
+                className="w-1/3 border py-2.5 rounded-full font-medium text-gray-600 hover:bg-gray-50 transition text-sm disabled:opacity-50"
+              >
+                Back
+              </button>
+
+              <button
+                onClick={handleFinalPayment}
+                disabled={loading || cartItems.length === 0}
+                className="w-2/3 py-2.5 rounded-full font-medium text-slate-900 bg-emerald-400 hover:bg-emerald-500 transition text-sm disabled:opacity-50"
+              >
+                {loading ? 'Processing...' : `Pay $${subtotal.toFixed(2)}`}
+              </button>
+            </div>
+
+            {error && (
+              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-md">
+                {error}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
-            {/* Cart items */}
             <section className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex justify-between items-end border-b pb-3 mb-2">
-                <h1 className="text-2xl font-medium">Shopping Cart</h1>
+                <h1 className="text-2xl font-medium">
+                  Shopping Cart
+                </h1>
                 <span className="text-sm text-gray-500">Price</span>
               </div>
 
               {!loaded ? (
-                <div className="py-16 text-center text-gray-400">Loading cart...</div>
+                <div className="py-16 text-center text-gray-400">
+                  Loading cart...
+                </div>
               ) : cartItems.length === 0 ? (
                 <div className="py-16 text-center">
                   <p className="text-xl mb-2">Your cart is empty</p>
-                  <Link href="/" className="text-indigo-600 hover:underline text-sm">
+                  <Link
+                    href="/"
+                    className="text-indigo-600 hover:underline text-sm"
+                  >
                     Browse products
                   </Link>
                 </div>
@@ -176,7 +344,10 @@ export default function CartPage() {
                       item.quantity >= item.product.stockQuantity;
 
                     return (
-                      <li key={item.product.id} className="py-5 flex gap-5">
+                      <li
+                        key={item.product.id}
+                        className="py-5 flex gap-5"
+                      >
                         <div className="w-28 h-28 sm:w-40 sm:h-40 shrink-0 bg-gray-50 rounded-md overflow-hidden border">
                           <img
                             src={item.product.imageUrl || FALLBACK_IMG}
@@ -193,12 +364,16 @@ export default function CartPage() {
                             <h3 className="text-lg font-medium text-slate-900 line-clamp-2">
                               {item.product.name}
                             </h3>
+
                             <p className="text-lg font-bold whitespace-nowrap">
                               ${(item.product.price * item.quantity).toFixed(2)}
                             </p>
                           </div>
 
-                          <p className="text-sm text-emerald-700 mt-1">In Stock</p>
+                          <p className="text-sm text-emerald-700 mt-1">
+                            In Stock
+                          </p>
+
                           <p className="text-xs text-gray-500 mt-0.5">
                             ${item.product.price.toFixed(2)} each
                           </p>
@@ -206,17 +381,23 @@ export default function CartPage() {
                           <div className="flex items-center gap-4 mt-4">
                             <div className="flex items-center border-2 border-amber-400 rounded-full overflow-hidden bg-white">
                               <button
-                                onClick={() => updateQuantity(item.product.id, -1)}
+                                onClick={() =>
+                                  updateQuantity(item.product.id, -1)
+                                }
                                 className="px-3 py-1 font-bold hover:bg-amber-50 transition"
                                 aria-label="Decrease quantity"
                               >
                                 {item.quantity === 1 ? '🗑' : '−'}
                               </button>
+
                               <span className="px-3 text-sm font-semibold min-w-[2rem] text-center">
                                 {item.quantity}
                               </span>
+
                               <button
-                                onClick={() => updateQuantity(item.product.id, 1)}
+                                onClick={() =>
+                                  updateQuantity(item.product.id, 1)
+                                }
                                 disabled={atMax}
                                 className="px-3 py-1 font-bold hover:bg-amber-50 transition disabled:opacity-30 disabled:cursor-not-allowed"
                                 aria-label="Increase quantity"
@@ -226,6 +407,7 @@ export default function CartPage() {
                             </div>
 
                             <span className="text-gray-300">|</span>
+
                             <button
                               onClick={() => removeItem(item.product.id)}
                               className="text-sm text-indigo-600 hover:underline"
@@ -249,24 +431,32 @@ export default function CartPage() {
               {cartItems.length > 0 && (
                 <div className="text-right text-lg pt-4 border-t">
                   Subtotal ({itemCount} item{itemCount !== 1 && 's'}):{' '}
-                  <span className="font-bold">${subtotal.toFixed(2)}</span>
+                  <span className="font-bold">
+                    ${subtotal.toFixed(2)}
+                  </span>
                 </div>
               )}
             </section>
 
-            {/* Checkout box */}
             <aside className="bg-white rounded-lg shadow-sm p-6 lg:sticky lg:top-6">
-              <p className="text-sm text-emerald-700 mb-2">✓ Your order qualifies for FREE shipping</p>
+              <p className="text-sm text-emerald-700 mb-2">
+                ✓ Your order qualifies for FREE shipping
+              </p>
+
               <p className="text-lg mb-4">
                 Subtotal ({itemCount} item{itemCount !== 1 && 's'}):{' '}
-                <span className="font-bold">${subtotal.toFixed(2)}</span>
+                <span className="font-bold">
+                  ${subtotal.toFixed(2)}
+                </span>
               </p>
 
               <label className="block text-xs font-semibold text-gray-600 mb-1">
                 Customer User ID
               </label>
+
               <input
                 type="number"
+                min="1"
                 value={userId}
                 onChange={(e) => setUserId(Number(e.target.value))}
                 className="w-full border px-3 py-2 rounded-md mb-4 text-sm focus:ring-2 focus:ring-amber-400 outline-none"
@@ -274,15 +464,15 @@ export default function CartPage() {
               />
 
               <button
-                onClick={handleCheckout}
-                disabled={cartItems.length === 0 || loading}
+                onClick={startCheckout}
+                disabled={cartItems.length === 0 || !loaded}
                 className="w-full py-2.5 rounded-full font-medium text-slate-900 bg-amber-400 hover:bg-amber-500 transition disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
               >
-                {loading ? 'Processing...' : 'Proceed to Checkout'}
+                Proceed to Checkout
               </button>
 
               {error && (
-                <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-md break-words">
+                <div className="mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-md">
                   {error}
                 </div>
               )}

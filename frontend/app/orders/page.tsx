@@ -13,7 +13,7 @@ interface OrderItem {
 }
 
 interface Order {
-  id: number;
+  id: string;
   userId?: number;
   user?: { id: number; name?: string; email?: string };
   totalPrice?: number;
@@ -32,6 +32,7 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [userFilter, setUserFilter] = useState('');
   const [cartCount, setCartCount] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   const loadOrders = () => {
     setLoading(true);
@@ -61,6 +62,7 @@ export default function OrdersPage() {
   };
 
   useEffect(() => {
+    setMounted(true);
     loadOrders();
     try {
       const cart = JSON.parse(localStorage.getItem('cart') || '[]');
@@ -70,29 +72,56 @@ export default function OrdersPage() {
     }
   }, []);
 
+  const updateStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`http://localhost:8080/orders/${orderId}/status?status=${newStatus}`, {
+        method: 'PATCH',
+      });
+
+      if (!response.ok) throw new Error('Failed to update order status');
+
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order.id === orderId ? { ...order, status: newStatus.toUpperCase() } : order
+        )
+      );
+    } catch (err) {
+      console.error(err);
+      alert('Error updating order status');
+    }
+  };
+
   const getUserId = (o: Order) => o.userId ?? o.user?.id;
 
   const visibleOrders = useMemo(() => {
-    const sorted = [...orders].sort((a, b) => b.id - a.id); // newest first
+    const sorted = [...orders].sort((a, b) => {
+      const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+      const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+      return dateB - dateA;
+    });
     if (!userFilter.trim()) return sorted;
     return sorted.filter((o) => String(getUserId(o)) === userFilter.trim());
   }, [orders, userFilter]);
 
-  const formatDate = (d?: string) =>
-    d
-      ? new Date(d).toLocaleDateString(undefined, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        })
-      : null;
+  const formatDate = (d?: string) => {
+    if (!d) return null;
+    // Use a stable formatting approach or fallback during SSR
+    if (!mounted) return d.split('T')[0]; // Simple ISO date string for server render
+    return new Date(d).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
 
   const statusStyle = (status?: string) => {
     switch (status?.toUpperCase()) {
       case 'PENDING':
         return 'bg-amber-100 text-amber-700';
-      case 'SHIPPED':
+      case 'PROCESSING':
         return 'bg-blue-100 text-blue-700';
+      case 'SHIPPED':
+        return 'bg-indigo-100 text-indigo-700';
       case 'DELIVERED':
       case 'COMPLETED':
         return 'bg-emerald-100 text-emerald-700';
@@ -189,11 +218,10 @@ export default function OrdersPage() {
 
               return (
                 <div key={order.id} className="bg-white border rounded-xl shadow-sm overflow-hidden">
-                  {/* Order header */}
-                  <div className="bg-gray-50 border-b px-6 py-4 flex flex-wrap justify-between gap-4 text-sm">
+                  <div className="bg-gray-50 border-b px-6 py-4 flex flex-wrap justify-between items-center gap-4 text-sm">
                     <div>
-                      <p className="text-xs uppercase text-gray-500 font-semibold">Order</p>
-                      <p className="font-bold text-indigo-600">#{order.id}</p>
+                      <p className="text-xs uppercase text-gray-500 font-semibold">Order ID</p>
+                      <p className="font-bold text-indigo-600">{order.id}</p>
                     </div>
                     {formatDate(order.orderDate) && (
                       <div>
@@ -213,18 +241,29 @@ export default function OrdersPage() {
                       <p className="text-xs uppercase text-gray-500 font-semibold">Total</p>
                       <p className="font-bold">${Number(order.totalPrice ?? 0).toFixed(2)}</p>
                     </div>
-                    {order.status && (
+
+                    <div className="flex items-center gap-2">
                       <span
                         className={`self-center text-xs font-semibold px-3 py-1 rounded-full ${statusStyle(
                           order.status
                         )}`}
                       >
-                        {order.status}
+                        {order.status || 'PENDING'}
                       </span>
-                    )}
+                      <select
+                        value={order.status || 'PENDING'}
+                        onChange={(e) => updateStatus(order.id, e.target.value)}
+                        className="text-xs border rounded px-2 py-1 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="PENDING">PENDING</option>
+                        <option value="PROCESSING">PROCESSING</option>
+                        <option value="SHIPPED">SHIPPED</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                        <option value="CANCELLED">CANCELLED</option>
+                      </select>
+                    </div>
                   </div>
 
-                  {/* Items */}
                   {items.length === 0 ? (
                     <p className="px-6 py-4 text-sm text-gray-400">No item details returned.</p>
                   ) : (
