@@ -23,15 +23,19 @@ public class PaymentService {
         Stripe.apiKey = stripeApiKey;
     }
 
-
 	public PaymentIntent createPaymentIntent(BigDecimal amount) throws StripeException {
-		long amountInCents= amount.multiply(new BigDecimal(100)).longValue();
+		long amountInCents = amount.multiply(new BigDecimal(100)).longValue();
+		
 		PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
 		        .setAmount(amountInCents)
 		        .setCurrency("gbp")
-		        .addPaymentMethodType("card")
+		        .setAutomaticPaymentMethods(
+		            PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
+		                .setEnabled(true)
+		                .build()
+		        )
 		        .build();
+		        
 		return PaymentIntent.create(params);
 	}
-
 }
